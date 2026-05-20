@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>Walk-safe Keyboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css" />
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: #fff; color: #1f1f1f;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden; overscroll-behavior: none;
+  }
+
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+  #statusbar {
+    height: calc(28px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 18px 0;
+    background: #fff;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; font-weight: 500; color: #1f1f1f;
+    flex-shrink: 0;
+  }
+  #statusbar .icons { display: flex; gap: 6px; align-items: center; }
+  #statusbar .icons i { font-size: 14px; }
+
+  #chat-header {
+    background: #fff; padding: 10px 14px;
+    border-bottom: 0.5px solid #e8eaed;
+    display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
+  }
+  #chat-header .back-icon { font-size: 22px; color: #1f1f1f; }
+  #chat-header .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #d97757;
+    display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+  #chat-header .avatar i { font-size: 18px; }
+  #chat-header .info { flex: 1; line-height: 1.15; }
+  #chat-header .name { font-size: 16px; font-weight: 500; }
+  #chat-header .status { font-size: 12px; color: #5f6368; }
+  #chat-header .menu { font-size: 20px; color: #5f6368; }
+
+  #chat-messages {
+    flex: 1; background: #f6f8fc; padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    overflow-y: auto;
+  }
+  .bubble {
+    padding: 10px 14px; border-radius: 18px;
+    max-width: 82%; font-size: 14px; line-height: 1.4;
+  }
+  .bubble.them {
+    background: #fff; color: #1f1f1f;
+    border-bottom-left-radius: 4px; align-self: flex-start;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .bubble.me {
+    background: #1a73e8; color: #fff;
+    border-bottom-right-radius: 4px; align-self: flex-end;
+  }
+
+  #input-bar {
+    background: #fff; padding: 8px 10px 10px;
+    border-top: 0.5px solid #e8eaed;
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0;
+  }
+  #input-bar .plus { font-size: 24px; color: #5f6368; }
+  #input-display {
+    flex: 1; background: #f1f3f4; border-radius: 22px;
+    padding: 10px 16px; min-height: 22px;
+    font-size: 14px; color: #1f1f1f;
+    display: flex; align-items: center; flex-wrap: wrap;
+    word-break: break-word;
+  }
+  #cursor {
+    display: inline-block; width: 2px; height: 16px;
+    background: #1a73e8; margin-left: 1px;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+  #send-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #1a73e8;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; flex-shrink: 0;
+  }
+  #send-btn i { font-size: 18px; }
+
+  #keyboard-area {
+    position: relative; height: 290px; background: #dadce0;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+    flex-shrink: 0;
+  }
+
+  #cam {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: 0; background: #2a2a2a;
+  }
+  #dim-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.15); z-index: 1; pointer-events: none;
+  }
+  #cam-placeholder {
+    position: absolute; inset: 0; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 16px; text-align: center;
+    background: #dadce0; color: #1f1f1f;
+  }
+  #cam-placeholder.hidden { display: none; }
+  #cam-placeholder .ph-icon { font-size: 36px; color: #5f6368; }
+  #cam-placeholder h2 { font-size: 14px; margin: 0; font-weight: 500; }
+  #cam-placeholder p { font-size: 12px; margin: 0; line-height: 1.4; max-width: 280px; color: #5f6368; }
+  #cam-placeholder button {
+    margin-top: 4px; background: #1a73e8; color: #fff;
+    border: none; padding: 10px 22px; border-radius: 999px;
+    font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  #cam-error { color: #d93025; font-size: 11px; display: none; max-width: 280px; }
+
+  #controls {
+    position: absolute; top: 8px; right: 10px; z-index: 4;
+    display: flex; gap: 6px;
+  }
+  .ctrl-btn {
+    width: 32px; height: 32px; border-radius: 999px;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 0.5px solid rgba(255,255,255,0.3); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0;
+  }
+  .ctrl-btn i { font-size: 16px; }
+
+  #keyboard {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+    padding: 4px 3px 8px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  #suggestion-bar {
+    display: flex; gap: 4px; padding: 6px 6px 6px; align-items: center;
+  }
+  .sug {
+    flex: 1; text-align: center; font-size: 13px; color: #1f1f1f;
+    padding: 5px 4px; border-radius: 4px;
+  }
+  .sug.strong { font-weight: 500; }
+
+  .kb-row { display: flex; gap: 4px; padding: 0 3px; }
+  .kb-row.r2 { padding: 0 22px; }
+
+  .kb-key {
+    flex: 1; min-width: 0; height: 42px;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; color: #1f1f1f;
+    border-radius: 6px; font-size: 17px; font-weight: 400;
+    border: 0.5px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.1);
+    user-select: none; -webkit-user-select: none;
+    cursor: pointer; transition: background 0.08s;
+  }
+  .kb-key:active { background: #e8eaed; }
+  .kb-key.gray { background: #c9cdd2; font-size: 13px; }
+  .kb-key.gray:active { background: #b8bcc1; }
+  .kb-key.space { flex: 5; font-size: 13px; }
+  .kb-key.wide { flex: 1.4; font-size: 13px; }
+
+  #app.cam-on #suggestion-bar .sug {
+    color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+  #app.cam-on .kb-key {
+    background: rgba(255,255,255,0.28); color: #fff;
+    border-color: rgba(255,255,255,0.18);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5); box-shadow: none;
+  }
+  #app.cam-on .kb-key.gray { background: rgba(0,0,0,0.35); }
+  #app.cam-on.dim-low .kb-key {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.1);
+  }
+  #app.cam-on.dim-low .kb-key.gray { background: rgba(0,0,0,0.25); }
+  #app.cam-on.dim-high .kb-key {
+    background: rgba(0,0,0,0.55);
+    border-color: rgba(255,255,255,0.2);
+  }
+  #app.cam-on.dim-high .kb-key.gray { background: rgba(0,0,0,0.7); }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div id="statusbar">
+    <span>9:41</span>
+    <div class="icons">
+      <i class="ti ti-signal-4g"></i>
+      <i class="ti ti-wifi"></i>
+      <i class="ti ti-battery-3"></i>
+    </div>
+  </div>
+
+  <div id="chat-header">
+    <i class="ti ti-arrow-left back-icon"></i>
+    <div class="avatar"><i class="ti ti-sparkles"></i></div>
+    <div class="info">
+      <div class="name">Claude</div>
+      <div class="status">AI assistant</div>
+    </div>
+    <i class="ti ti-dots-vertical menu"></i>
+  </div>
+
+  <div id="chat-messages">
+    <div class="bubble them">Which algorithm fits best for last-mile delivery routing across 200 stops?</div>
+    <div class="bubble me">Compare OR-Tools VRP solver vs. a genetic algorithm for that scale</div>
+    <div class="bubble them">At 200 stops, OR-Tools (CP-SAT + guided local search) usually wins on solution quality and runtime — sub-second to a few seconds for high-quality routes. A GA gives more flexibility for custom constraints but needs careful tuning and longer convergence...</div>
+    <div class="bubble me">What about time-window constraints?</div>
+    <div class="bubble them">OR-Tools handles time windows natively via dimension constraints. You define an arrival-time dimension on each node...</div>
+  </div>
+
+  <div id="input-bar">
+    <i class="ti ti-plus plus"></i>
+    <div id="input-display">
+      <span id="text-content">How does the savings algorithm</span><span id="cursor"></span>
+    </div>
+    <div id="send-btn"><i class="ti ti-send"></i></div>
+  </div>
+
+  <div id="keyboard-area">
+
+    <video id="cam" autoplay playsinline muted></video>
+    <div id="dim-overlay"></div>
+
+    <div id="cam-placeholder">
+      <i class="ti ti-camera ph-icon"></i>
+      <h2>Walk-safe keyboard</h2>
+      <p>Shows the live camera feed behind the keys so you can see obstacles while typing on the go</p>
+      <button id="start-cam">Start camera</button>
+      <p id="cam-error"></p>
+    </div>
+
+    <div id="controls">
+      <button class="ctrl-btn" id="toggle-dim" title="Key brightness"><i class="ti ti-adjustments-horizontal"></i></button>
+      <button class="ctrl-btn" id="toggle-cam" title="Camera on/off"><i class="ti ti-camera"></i></button>
+    </div>
+
+    <div id="keyboard">
+      <div id="suggestion-bar">
+        <div class="sug">work</div>
+        <div class="sug strong">works</div>
+        <div class="sug">working</div>
+      </div>
+      <div class="kb-row" data-row="0"></div>
+      <div class="kb-row r2" data-row="1"></div>
+      <div class="kb-row" data-row="2"></div>
+      <div class="kb-row" data-row="3"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const layout = [
+    ['q','w','e','r','t','y','u','i','o','p'],
+    ['a','s','d','f','g','h','j','k','l'],
+    ['shift','z','x','c','v','b','n','m','back'],
+    ['?123','comma','space','period','return']
+  ];
+  const labels = { shift:'\u21E7', back:'\u232B', '?123':'?123', comma:',', period:'.', space:'', 'return':'\u21B5' };
+  const wide = new Set(['shift','back','?123','return']);
+  const gray = new Set(['shift','back','?123','comma','period','return']);
+  const textContent = document.getElementById('text-content');
+
+  document.querySelectorAll('.kb-row').forEach((row, i) => {
+    layout[i].forEach(k => {
+      const el = document.createElement('div');
+      let cls = 'kb-key';
+      if (gray.has(k)) cls += ' gray';
+      if (wide.has(k)) cls += ' wide';
+      if (k === 'space') cls += ' space';
+      el.className = cls;
+      el.textContent = labels[k] !== undefined ? labels[k] : k;
+      el.addEventListener('click', () => {
+        if (k === 'back') textContent.textContent = textContent.textContent.slice(0, -1);
+        else if (k === 'space') textContent.textContent += ' ';
+        else if (k === 'comma') textContent.textContent += ',';
+        else if (k === 'period') textContent.textContent += '.';
+        else if (k === 'return' || k === 'shift' || k === '?123') { /* noop */ }
+        else textContent.textContent += k;
+      });
+      row.appendChild(el);
+    });
+  });
+
+  const video = document.getElementById('cam');
+  const placeholder = document.getElementById('cam-placeholder');
+  const startBtn = document.getElementById('start-cam');
+  const toggleCam = document.getElementById('toggle-cam');
+  const toggleDim = document.getElementById('toggle-dim');
+  const errorEl = document.getElementById('cam-error');
+  const app = document.getElementById('app');
+  let stream = null;
+  let dimState = 0;
+
+  async function startCamera() {
+    errorEl.style.display = 'none';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      placeholder.classList.add('hidden');
+      app.classList.add('cam-on');
+    } catch (e) {
+      errorEl.style.display = 'block';
+      errorEl.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      video.srcObject = null;
+      placeholder.classList.remove('hidden');
+      app.classList.remove('cam-on');
+    }
+  }
+
+  startBtn.addEventListener('click', startCamera);
+  toggleCam.addEventListener('click', () => stream ? stopCamera() : startCamera());
+  toggleDim.addEventListener('click', () => {
+    dimState = (dimState + 1) % 3;
+    app.classList.remove('dim-low', 'dim-high');
+    if (dimState === 1) app.classList.add('dim-low');
+    if (dimState === 2) app.classList.add('dim-high');
+  });
+})();
+</script>
+
+</body>
+</html>
